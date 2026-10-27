@@ -52,9 +52,10 @@ limits:
   min_delay: 1.25        # 两条之间的最小间隔（秒）
   max_delay: 3.75        # 最大间隔
   daily_max: 0           # 单日上限，0=不限
+  cooldown_seconds: 0    # 失败后等待秒数，0=不等待
 restriction:
-  cooldown_seconds: 3600 # 限流后等待秒数（1 小时）
-  max_retries: 5         # 最多重试 5 次
+  cooldown_seconds: 0    # 限流后等待秒数，0=不等待
+  max_retries: 5         # 最多重试 5 次（立即探测）
 ```
 
 完整键见 `config.example.yaml` 内的注释。

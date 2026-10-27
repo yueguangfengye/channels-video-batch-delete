@@ -69,7 +69,12 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(c.get("range.end"), "2025-12-31")
         self.assertEqual(c.get("limits.min_delay"), 1.25)
         self.assertEqual(c.get("limits.max_delay"), 3.75)
-        self.assertEqual(c.get("restriction.cooldown_seconds"), 3600)
+        self.assertEqual(c.get("restriction.cooldown_seconds"), 0)
+        # 长休已移除：默认配置里不应再出现这三项
+        self.assertIsNone(c.get("limits.long_pause_every"))
+        self.assertIsNone(c.get("limits.long_pause_min"))
+        self.assertIsNone(c.get("limits.long_pause_max"))
+        self.assertEqual(c.get("limits.cooldown_seconds"), 0)
         self.assertEqual(c.get("restriction.max_retries"), 5)
         self.assertFalse(c.get("trash.enabled"))
 
@@ -148,8 +153,36 @@ class TestThrottle(unittest.TestCase):
 
         t = Throttle(Config({}), R())
         self.assertEqual((t._lo, t._hi), (1.25, 3.75))
-        self.assertEqual(t._every, 12)
-        self.assertGreaterEqual(t._lmax, t._lmin)
+        # 长休已移除：Throttle 不再有周期性长休相关的属性
+        for attr in ("_every", "_lmin", "_lmax"):
+            self.assertFalse(hasattr(t, attr), f"Throttle 不应再有 {attr}")
+
+    def test_no_long_pause_between_items(self):
+        """连续 20 条只应有基础间隔，不出现 20 秒以上的停顿。"""
+        from cleaner.config import Config
+        from cleaner.throttle import Throttle
+        import cleaner.throttle as th
+
+        class R:
+            def op(self, *a, **k): pass
+            def debug(self, *a, **k): pass
+            def warn(self, *a, **k): pass
+
+        sleeps = []
+        orig = th.sleep_interruptible
+        th.sleep_interruptible = lambda s, stop: sleeps.append(s)
+        try:
+            import threading
+
+            t = Throttle(Config({}), R())
+            stop = threading.Event()
+            for _ in range(20):
+                t.after_action(stop)
+        finally:
+            th.sleep_interruptible = orig
+
+        self.assertEqual(len(sleeps), 20, "每条都应只休眠一次")
+        self.assertLessEqual(max(sleeps), 3.8, f"出现超长间隔：{max(sleeps)}")
 
 
 class TestVision(unittest.TestCase):

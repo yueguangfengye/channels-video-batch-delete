@@ -20,7 +20,30 @@ BAK = ROOT / "_config.bak.yaml"
 PY = sys.executable
 
 
+def _set_restriction_cooldown(text: str, seconds: int) -> str:
+    """只改 restriction: 块下的 cooldown_seconds，不碰 limits 里同名的那一项。"""
+    lines = text.splitlines()
+    in_block = False
+    for i, ln in enumerate(lines):
+        stripped = ln.strip()
+        if stripped.startswith("restriction:"):
+            in_block = True
+            continue
+        if in_block and stripped and not ln.startswith((" ", "\t")):
+            break  # 到了下一个顶层键
+        if in_block and stripped.startswith("cooldown_seconds:"):
+            indent = ln[: len(ln) - len(ln.lstrip())]
+            lines[i] = f"{indent}cooldown_seconds: {seconds}"
+            break
+    return "\n".join(lines) + "\n"
+
+
 def main():
+    created_cfg = False
+    if not CFG.exists() and (ROOT / "config.example.yaml").exists():
+        shutil.copy2(ROOT / "config.example.yaml", CFG)
+        created_cfg = True
+        print("[准备] 未找到 config.yaml，已从 config.example.yaml 复制一份")
     shutil.copy2(CFG, BAK)
     try:
         text = CFG.read_text(encoding="utf-8")
@@ -28,10 +51,10 @@ def main():
             'risk_signals: ["操作过于频繁", "系统繁忙", "请稍后再试", "网络异常", "请求失败"]',
             'risk_signals: ["操作过于频繁", "系统繁忙", "请稍后再试", "网络异常", "请求失败", "视频管理"]',
         )
-        text = text.replace("  cooldown_seconds: 3600", "  cooldown_seconds: 30")
+        text = _set_restriction_cooldown(text, 30)
         text = text.replace("  max_retries: 5", "  max_retries: 1")
         CFG.write_text(text, encoding="utf-8")
-        print("[注入] risk_signals 增加 '视频管理'，cooldown=30s，max_retries=1")
+        print("[注入] risk_signals 增加 '视频管理'，restriction.cooldown=30s，max_retries=1")
 
         # 清掉上一次的测试产物
         for p in (ROOT / "logs" / "restrictions.jsonl", ROOT / "logs" / "RESTRICTION-REPORT.md"):
@@ -89,6 +112,8 @@ def main():
     finally:
         shutil.copy2(BAK, CFG)
         BAK.unlink(missing_ok=True)
+        if created_cfg:
+            CFG.unlink(missing_ok=True)
         for f in (".pause", ".resume", ".stop"):
             q = ROOT / f
             if q.exists():

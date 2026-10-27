@@ -106,7 +106,7 @@ channels-video-batch-delete/
 │   ├── state.py              # 断点续跑状态机
 │   ├── recorder.py           # 日志与失败截图
 │   ├── throttle.py           # 随机间隔、熔断、配置热重载
-│   ├── restriction.py        # 限流识别、1 小时冷却、恢复探测、报告
+│   ├── restriction.py        # 限流识别、恢复探测、报告（默认不等待）
 │   ├── edge.py               # Edge 定位与带调试端口启动
 │   ├── cdp.py                # Chrome DevTools Protocol 客户端
 │   ├── dom.py                # 注入页面的探针（支持无界微前端 Shadow DOM）

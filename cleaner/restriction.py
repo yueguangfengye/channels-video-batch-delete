@@ -2,7 +2,7 @@
 
 职责：
     1. 限制发生时，把「具体内容 / 触发的规则 / 时间点 / 现场上下文」完整落盘
-    2. 等待配置的冷却时长（默认 1 小时）后自动继续
+    2. 按 `restriction.cooldown_seconds` 决定是否等待（默认 0 = 不等待，立即探测）
     3. 重试前做恢复探测，满足全部条件才继续执行
     4. 多次重试仍被限制时，生成报告、进入人工暂停，不再盲目重试
 
@@ -172,7 +172,7 @@ class RestrictionGuard:
         self.page = page
         self.state = state
         self.log = RestrictionLog(cfg.log_dir, cfg.get("restriction.report_file", "RESTRICTION-REPORT.md"))
-        self.cooldown = int(cfg.get("restriction.cooldown_seconds", 3600) or 3600)
+        self.cooldown = int(cfg.get("restriction.cooldown_seconds", 0) or 0)
         self.max_retries = int(cfg.get("restriction.max_retries", 5) or 5)
         self.min_page_ratio = float(cfg.get("restriction.min_page_ratio", 0.9))
         # 上下文（由 flow 在运行中更新）
@@ -265,14 +265,22 @@ class RestrictionGuard:
 
         # 全部重试失败 -> 升级为人工处理
         self._escalate(signal, rule)
-        span = f"{self.cooldown // 60} 分钟" if self.cooldown >= 60 else f"{self.cooldown} 秒"
+        span = (
+            "未等待（冷却已关闭）"
+            if self.cooldown <= 0
+            else (f"{self.cooldown // 60} 分钟" if self.cooldown >= 60 else f"{self.cooldown} 秒")
+        )
         raise RuntimeError(
-            f"连续 {self.max_retries} 次等待 {span} 后仍被限制（{signal}）。"
+            f"连续 {self.max_retries} 次{span}后仍被限制（{signal}）。"
             f"已停止自动重试，详见 {self.log.report_path}"
         )
 
     # ---------------- 等待 ----------------
     def _wait(self, seconds: int, stop, attempt: int) -> None:
+        if seconds <= 0:
+            # 冷却已关闭：不等待，直接进入恢复探测
+            self.r.op("restriction_wait", attempt=attempt, seconds=0, resume_at="立即")
+            return
         until = time.time() + seconds
         self.r.op(
             "restriction_wait",

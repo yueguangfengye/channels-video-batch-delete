@@ -175,11 +175,9 @@ locate:
 
 ```yaml
 limits:
-  min_delay: 2.5          # 两条视频之间的最小间隔（秒）
-  max_delay: 7.5          # 最大间隔，实际取两者之间的随机值
-  long_pause_every: 12    # 每删 12 条长休一次
-  long_pause_min: 20
-  long_pause_max: 45
+  min_delay: 1.25         # 两条视频之间的最小间隔（秒）
+  max_delay: 3.75         # 最大间隔，实际取两者之间的随机值
+  cooldown_seconds: 0     # 失败后等待秒数，0=不等待（长休已移除）
   scroll_pause: 1.2       # 每滚一屏等多久渲染
 ```
 
@@ -354,7 +352,7 @@ python run.py resume --yes
 ## 九、被内容管理限制时怎么办（自动恢复）
 
 限制发生时不会静默失败，也不会盲目重试。完整流程是：
-**记录现场 → 等 1 小时 → 探测是否恢复 → 通过则继续，不通过则再等一轮 → 5 轮仍失败则转人工。**
+**记录现场 → 立即探测是否恢复 → 通过则继续，不通过则再探测一次 → 5 轮仍失败则转人工。**
 
 ### 9.1 记录了什么
 
@@ -379,11 +377,11 @@ python run.py resume --yes
 
 | 项目 | 默认值 | 配置项 |
 |---|---|---|
-| 每次等待 | **3600 秒（1 小时）** | `restriction.cooldown_seconds` |
-| 最多重试 | **5 次**（累计最长 5 小时） | `restriction.max_retries` |
+| 每次等待 | **0 秒（不等待）** | `restriction.cooldown_seconds` |
+| 最多重试 | **5 次** | `restriction.max_retries` |
 
-第 N 轮：记录 → 等 1 小时 → 探测 → 通过则继续执行未完成的任务；不通过进入第 N+1 轮。
-冷却期间每 10 分钟在日志里报一次剩余时间，且随时可用 `.stop` / Ctrl+C 中止。
+第 N 轮：记录 → 立即探测 → 通过则继续执行未完成的任务；不通过进入第 N+1 轮。
+不等待期间随时可用 `.stop` / Ctrl+C 中止。
 
 ### 9.3 每次重试前必须同时满足三个条件
 
@@ -392,7 +390,7 @@ python run.py resume --yes
 3. **页数未缩水**：分页总页数 ≥ 预期的 90%
    （专门针对「总页数从 138 被压成 10」这种隐性限流，它不报错但会漏数据）
 
-三条全过才算恢复；任一不过就继续等下一个 1 小时。
+三条全过才算恢复；任一不过就立刻进入下一次探测。
 
 ### 9.4 5 次都失败时的处理
 
@@ -413,8 +411,8 @@ python run.py run --yes --skip-collect
 
 | 场景 | 等待 | 重试上限 | 配置项 |
 |---|---|---|---|
-| 内容管理限制 / 数据被截断 | 1 小时 | 5 次 | `restriction.*` |
-| 单条视频定位失败（弹窗没出来等） | 20 分钟 | 2 次 | `limits.cooldown_seconds` / `limits.max_retry_per_item` |
+| 内容管理限制 / 数据被截断 | 不等待 | 5 次 | `restriction.*` |
+| 单条视频定位失败（弹窗没出来等） | 不等待 | 2 次 | `limits.cooldown_seconds` / `limits.max_retry_per_item` |
 
 ---
 

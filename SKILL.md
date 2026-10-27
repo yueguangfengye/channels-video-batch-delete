@@ -3,8 +3,8 @@ name: channels-video-batch-delete
 version: "1.0.0"
 display_name: "视频号助手批量删除视频"
 display_name_en: "Channels Video Batch Delete"
-description: "在电脑端视频号助手后台，按用户给定的时间范围批量删除视频。支持「YYYY-MM-DD 到 YYYY-MM-DD」「YYYY-MM」「最近N天」三种输入。先列出「标题+发布日期」清单，必须等用户明确回复「确认删除」才执行；遇限流自动等待 1 小时并探测恢复后继续；最终复核范围内无残留。"
-description_zh: "在电脑端视频号助手后台，按用户给定的时间范围批量删除视频。支持「YYYY-MM-DD 到 YYYY-MM-DD」「YYYY-MM」「最近N天」三种输入。先列出「标题+发布日期」清单，必须等用户明确回复「确认删除」才执行；遇限流自动等待 1 小时并探测恢复后继续；最终复核范围内无残留。"
+description: "在电脑端视频号助手后台，按用户给定的时间范围批量删除视频。支持「YYYY-MM-DD 到 YYYY-MM-DD」「YYYY-MM」「最近N天」三种输入。先列出「标题+发布日期」清单，必须等用户明确回复「确认删除」才执行；遇限流立即探测恢复后继续（不等待）；最终复核范围内无残留。"
+description_zh: "在电脑端视频号助手后台，按用户给定的时间范围批量删除视频。支持「YYYY-MM-DD 到 YYYY-MM-DD」「YYYY-MM」「最近N天」三种输入。先列出「标题+发布日期」清单，必须等用户明确回复「确认删除」才执行；遇限流立即探测恢复后继续（不等待）；最终复核范围内无残留。"
 description_en: 'Batch-delete videos published within a user-specified date range in the WeChat Channels creator backend on desktop. Accepts three input formats: YYYY-MM-DD to YYYY-MM-DD, YYYY-MM, and "last N days". Lists every video title with its publish date first and requires the user to reply exactly "确认删除" before any deletion; on rate limiting it waits one hour, re-probes the page, then continues; finally verifies that no in-range video remains.'
 删除程序: 'run.py（单次执行）、daemon.py（守护执行：断点续跑、限流自愈、每轮自动重连）。两者都位于本包根目录，一律用相对路径调用，不依赖任何绝对安装位置。'
 触发条件: "用户要求批量删除视频号历史视频并给出明确时间范围时加载。仅处理本机 Edge 中已登录的本人视频号账号，不处理他人账号。"
@@ -176,7 +176,7 @@ description_en: 'Batch-delete videos published within a user-specified date rang
 | 页面现象 | 判定 | 必须执行的动作 |
 |---|---|---|
 | 地址含 `login.html` 或出现「扫码登录」 | 未登录 | 停止，请用户扫码，不自动尝试登录 |
-| 顶部出现「操作过于频繁」 | 内容管理限流 | 记录时间点+命中原文+触发规则+页码+当时在删哪条，等 **1 小时**再探测 |
+| 顶部出现「操作过于频繁」 | 内容管理限流 | 记录时间点+命中原文+触发规则+页码+当时在删哪条，立即探测恢复（不等待） |
 | 列表突然 0 条，显示「你还没有发表过视频」 | 接口未返回数据（非真的没视频） | 按限流处理；**禁止**据此宣布删完 |
 | 总页数从 138 变成 10，数据只剩百余条 | 数据被截断（隐性限流） | 同上限流处理，不得把残量当全量 |
 | 点删除后无弹窗 | 可能点到了纯文字标签 | 改点 `div.opr-item-wrap` 容器，仍无效则停止报「页面不匹配」 |
@@ -186,14 +186,14 @@ description_en: 'Batch-delete videos published within a user-specified date rang
 | 页面跳到了草稿箱等无关页 | 误点导航 | 停止操作，报告 `页面不匹配：进入了<页面名>` |
 | 连续 3 轮一条都没删掉 | 可能已被限制或结构变化 | 停止并输出诊断，不得继续空转 |
 | 连点「下一页」十几次后页数骤减 | 触发翻页限流 | 改用页码输入框跳页，不再连点 |
-| 第 5 次等待 1 小时后仍被限制 | 限制未自愈 | 停止自动重试，生成限制报告并转人工 |
+| 连续 5 次探测仍被限制 | 限制未自愈 | 停止自动重试，生成限制报告并转人工 |
 
 **限流恢复的三个必要条件（必须同时满足才允许继续）**：
 1. 页面不再出现任何限流/验证码文字；
 2. 列表能正常扫到条目且条数 > 0；
 3. 分页总页数 ≥ 预期的 90%。
 
-**重试上限**：最多 5 次（每次间隔 1 小时）。仍失败则停止、保留断点、输出 `logs/RESTRICTION-REPORT.md`，不得无限重试。
+**重试上限**：最多 5 次（不等待，立即探测）。仍失败则停止、保留断点、输出 `logs/RESTRICTION-REPORT.md`，不得无限重试。
 
 ---
 

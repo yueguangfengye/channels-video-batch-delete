@@ -121,7 +121,7 @@ class Cleaner:
         for kw in self._risk_signals:
             if kw in hit:
                 self.rec.op("signal", kind="risk", keyword=kw)
-                # 内容管理限制：完整记录现场 -> 等 1 小时 -> 探测恢复 -> 继续
+                # 内容管理限制：完整记录现场 -> 按配置等待(默认 0 秒) -> 探测恢复 -> 继续
                 self.restriction.handle(
                     signal=kw,
                     rule=f"selectors.risk_signals ← 命中 {kw!r}",
@@ -155,7 +155,7 @@ class Cleaner:
 
         视频号后台是「分页」而不是无限滚动。先正常扫一遍；如果一条都没扫到，
         几乎一定是接口被限流（页面会渲染成「你还没有发表过视频」），此时按
-        配置冷却 20 分钟后重扫，而不是直接判定「没有视频」。
+        按配置冷却（默认 0 秒，立即）后重扫，而不是直接判定「没有视频」。
         """
         found = self._scan_all(phase)
 
@@ -177,7 +177,7 @@ class Cleaner:
         if found:
             return found
 
-        self.rec.op("scan_empty", phase=phase, note="0 条，疑似接口限流，进入冷却")
+        self.rec.op("scan_empty", phase=phase, note="0 条，疑似接口限流，进入重试")
         self.cooldown.trigger("列表 0 条，疑似接口限流", self.stop)
         found = self._scan_all(phase)
         if not found:
@@ -271,14 +271,14 @@ class Cleaner:
         return True
 
     def _fail_or_retry(self, item: Item, phase: str, tag: str, detail: str, attempt: int) -> bool:
-        """失败后先冷却 20 分钟再重试，超过次数上限才记为失败。"""
+        """失败后按配置冷却（默认 0 秒，立即重试），超过次数上限才记为失败。"""
         if attempt <= self.max_retry:
             self.rec.op("retry_scheduled", phase=phase, title=item.short(24), tag=tag,
                         attempt=attempt, of=self.max_retry, detail=detail[:120])
             try:
                 self.cooldown.trigger(f"{tag}: {detail}", self.stop)
             except StopRequested:
-                self._on_fail(item, phase, tag, detail + "（冷却期间被中止）")
+                self._on_fail(item, phase, tag, detail + "（等待期间被中止）")
                 raise
             return self.delete_one(item, phase, attempt + 1)
         self._on_fail(item, phase, tag, detail)

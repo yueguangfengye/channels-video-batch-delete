@@ -1,7 +1,7 @@
 """节流、熔断与暂停控制。
 
 三个东西：
-    Throttle : 随机间隔 + 周期性长休
+    Throttle : 两条之间的随机间隔（没有周期性长休）
     Breaker  : 连续失败熔断，防止页面异常时继续瞎点
     Pauser   : 标志文件驱动的暂停 / 恢复 / 中断
 
@@ -40,9 +40,6 @@ class Throttle:
     def _reload(self) -> None:
         self._lo = float(self.cfg.get("limits.min_delay", 1.25))
         self._hi = max(self._lo, float(self.cfg.get("limits.max_delay", 3.75)))
-        self._every = int(self.cfg.get("limits.long_pause_every", 12) or 0)
-        self._lmin = float(self.cfg.get("limits.long_pause_min", 20))
-        self._lmax = max(self._lmin, float(self.cfg.get("limits.long_pause_max", 45)))
 
     def _maybe_reload(self) -> None:
         """config.yaml 改了就地重载，不必重启进程。
@@ -69,8 +66,6 @@ class Throttle:
                 "throttle_reload",
                 old=f"{old[0]}~{old[1]}",
                 new=f"{self._lo}~{self._hi}",
-                long_every=self._every,
-                long_pause=f"{self._lmin}~{self._lmax}",
             )
         except Exception as e:
             self.r.warn("节流配置重载失败，沿用旧值：%s", e)
@@ -83,13 +78,12 @@ class Throttle:
         sleep_interruptible(delay, stop)
 
     def after_action(self, stop: threading.Event) -> None:
+        """成功删完一条后的间隔。
+
+        只有这一个基础间隔，不再有「每 N 条长休一次」的周期性停顿。
+        """
         self.count += 1
         self.wait(stop)
-        self._maybe_reload()
-        if self._every and self.count % self._every == 0:
-            d = random.uniform(self._lmin, self._lmax)
-            self.r.op("long_pause", seconds=round(d, 1), done=self.count)
-            sleep_interruptible(d, stop)
 
 
 class Breaker:
@@ -113,18 +107,21 @@ class Breaker:
 
 
 class Cooldown:
-    """请求受限 / 操作失败后的强制冷却，默认 20 分钟后自动重试。
+    """失败 / 受限后的等待器。
+
+    `limits.cooldown_seconds` 设为 0（当前默认）时完全不等待，直接返回，
+    让调用方立刻重试；大于 0 时按该秒数休眠。
 
     和 Pauser 的区别：
         Pauser   —— 遇到验证码这类必须人工介入的情况，阻塞等 `.resume`
-        Cooldown —— 遇到频率限制这类会自愈的情况，睡够时间自动继续
-    冷却期间仍然响应 `.stop` / Ctrl+C，可以随时中止。
+        Cooldown —— 遇到可自愈的情况，睡够配置时长后自动继续
+    等待期间仍然响应 `.stop` / Ctrl+C，可以随时中止。
     """
 
     def __init__(self, cfg, recorder):
         self.r = recorder
-        self.seconds = float(cfg.get("limits.cooldown_seconds", 1200))
-        self.max_rounds = int(cfg.get("limits.max_cooldown_rounds", 6) or 0)
+        self.seconds = float(cfg.get("limits.cooldown_seconds", 0) or 0)
+        self.max_rounds = int(cfg.get("limits.max_cooldown_rounds", 0) or 0)
         self.rounds = 0
         self._until = 0.0
 
@@ -133,6 +130,10 @@ class Cooldown:
         return time.monotonic() < self._until
 
     def trigger(self, reason: str, stop: threading.Event) -> None:
+        if self.seconds <= 0:
+            # 冷却已关闭：不计轮次、不写冷却日志、不等待
+            self.r.debug("冷却已关闭（cooldown_seconds=0），立即重试：%s", reason[:80])
+            return
         self.rounds += 1
         if self.max_rounds and self.rounds > self.max_rounds:
             raise RuntimeError(
