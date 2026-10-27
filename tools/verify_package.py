@@ -39,6 +39,10 @@ REQUIRED = [
 
 FORBIDDEN = ["state.json", ".edge-profile", "logs", "shots", "__pycache__", "*.png"]
 
+# 版本控制目录与字节码缓存既不进包，也不进 MANIFEST
+SKIP_PARTS = {".git", "__pycache__", ".idea", ".vscode"}
+SKIP_SUFFIX = {".pyc", ".pyo"}
+
 # 盘符前不能紧跟字母/数字，否则 https:// 里的 "s:" 会被误判成盘符
 ABS_PATH = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/][^\s\"'`]+")
 # 合理的平台探测路径（Windows 标准安装位置），不算硬编码
@@ -84,8 +88,25 @@ def check_no_sensitive() -> list[str]:
         for f in ROOT.rglob(pat):
             if f.name.endswith(".sha256"):
                 continue
-            bad.append(f"包含敏感/运行产物：{f.relative_to(ROOT)}")
+            rel = f.relative_to(ROOT)
+            # .git/ 下的 logs 是 git 自己的引用日志，不是运行产物
+            if ".git" in rel.parts:
+                continue
+            bad.append(f"包含敏感/运行产物：{rel}")
     return bad
+
+
+REQUIRED_FM = (
+    "name",
+    "version",
+    "display_name",
+    "display_name_en",
+    "description",
+    "description_zh",
+    "description_en",
+    "删除程序",
+    "触发条件",
+)
 
 
 def check_frontmatter() -> list[str]:
@@ -94,6 +115,8 @@ def check_frontmatter() -> list[str]:
     except ImportError:
         return ["缺少 PyYAML，无法校验 frontmatter"]
     txt = _read(ROOT / "SKILL.md")
+    if not txt.startswith("---"):
+        return ["SKILL.md 未以 --- 开头，frontmatter 缺失"]
     parts = txt.split("---")
     if len(parts) < 3:
         return ["SKILL.md 缺少 frontmatter"]
@@ -101,8 +124,26 @@ def check_frontmatter() -> list[str]:
         fm = yaml.safe_load(parts[1])
     except Exception as e:
         return [f"frontmatter 解析失败：{e}"]
-    missing = [k for k in ("name", "description", "删除程序", "触发条件") if k not in fm]
-    return [f"frontmatter 缺少字段：{m}" for m in missing]
+    if not isinstance(fm, dict):
+        return ["frontmatter 不是键值对象"]
+
+    errs = [f"frontmatter 缺少字段：{k}" for k in REQUIRED_FM if k not in fm]
+
+    # 空值也算缺失：只写 key 不写值同样过不了解析校验
+    for k in REQUIRED_FM:
+        if k in fm and (fm[k] is None or str(fm[k]).strip() == ""):
+            errs.append(f"frontmatter 字段为空：{k}")
+
+    ver = str(fm.get("version", ""))
+    if ver and not re.fullmatch(r"\d+\.\d+\.\d+", ver):
+        errs.append(f"version 不是 主.次.修订 格式：{ver!r}")
+
+    # description 与 description_zh 应当一致，避免两处描述漂移
+    if fm.get("description") and fm.get("description_zh"):
+        if str(fm["description"]).strip() != str(fm["description_zh"]).strip():
+            errs.append("description 与 description_zh 不一致")
+
+    return errs
 
 
 def check_config_keys() -> list[str]:
@@ -155,6 +196,8 @@ def check_manifest() -> list[str]:
         entries[rel.strip()] = h.strip()
     bad = []
     for rel, expect in entries.items():
+        if any(p in SKIP_PARTS for p in Path(rel).parts):
+            continue
         f = ROOT / rel
         if not f.exists():
             bad.append(f"MANIFEST 里的文件不存在：{rel}")
@@ -166,7 +209,12 @@ def check_manifest() -> list[str]:
     for f in ROOT.rglob("*"):
         if not f.is_file():
             continue
-        rel = str(f.relative_to(ROOT)).replace("\\", "/")
+        rel_path = f.relative_to(ROOT)
+        if any(p in SKIP_PARTS for p in rel_path.parts):
+            continue
+        if f.suffix in SKIP_SUFFIX:
+            continue
+        rel = str(rel_path).replace("\\", "/")
         if rel in ("MANIFEST.sha256",):
             continue
         if rel not in entries:
@@ -179,7 +227,13 @@ def write_manifest() -> None:
     for f in sorted(ROOT.rglob("*")):
         if not f.is_file():
             continue
-        rel = str(f.relative_to(ROOT)).replace("\\", "/")
+        rel_path = f.relative_to(ROOT)
+        # .git / 缓存不进清单：它们不会被打进 zip，写进来必然对不上
+        if any(p in SKIP_PARTS for p in rel_path.parts):
+            continue
+        if f.suffix in SKIP_SUFFIX:
+            continue
+        rel = str(rel_path).replace("\\", "/")
         if rel == "MANIFEST.sha256":
             continue
         h = hashlib.sha256(f.read_bytes()).hexdigest()

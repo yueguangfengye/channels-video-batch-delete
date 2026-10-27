@@ -1,8 +1,13 @@
 ---
 name: channels-video-batch-delete
-description: 在电脑端视频号助手后台，按用户给定的时间范围批量删除视频。支持「YYYY-MM-DD 到 YYYY-MM-DD」「YYYY-MM」「最近N天」三种输入。先列出「标题+发布日期」清单，必须等用户明确回复「确认删除」才执行；遇限流自动等待 1 小时并探测恢复后继续；最终复核范围内无残留。
-删除程序: "run.py（单次执行）、daemon.py（守护执行：断点续跑、限流自愈、每轮自动重连）。两者都位于本包根目录，一律用相对路径调用，不依赖任何绝对安装位置。"
-触发条件: 用户要求批量删除视频号历史视频并给出明确时间范围时加载。仅处理本机 Edge 中已登录的本人视频号账号，不处理他人账号。
+version: "1.0.0"
+display_name: "视频号助手批量删除视频"
+display_name_en: "Channels Video Batch Delete"
+description: "在电脑端视频号助手后台，按用户给定的时间范围批量删除视频。支持「YYYY-MM-DD 到 YYYY-MM-DD」「YYYY-MM」「最近N天」三种输入。先列出「标题+发布日期」清单，必须等用户明确回复「确认删除」才执行；遇限流自动等待 1 小时并探测恢复后继续；最终复核范围内无残留。"
+description_zh: "在电脑端视频号助手后台，按用户给定的时间范围批量删除视频。支持「YYYY-MM-DD 到 YYYY-MM-DD」「YYYY-MM」「最近N天」三种输入。先列出「标题+发布日期」清单，必须等用户明确回复「确认删除」才执行；遇限流自动等待 1 小时并探测恢复后继续；最终复核范围内无残留。"
+description_en: 'Batch-delete videos published within a user-specified date range in the WeChat Channels creator backend on desktop. Accepts three input formats: YYYY-MM-DD to YYYY-MM-DD, YYYY-MM, and "last N days". Lists every video title with its publish date first and requires the user to reply exactly "确认删除" before any deletion; on rate limiting it waits one hour, re-probes the page, then continues; finally verifies that no in-range video remains.'
+删除程序: 'run.py（单次执行）、daemon.py（守护执行：断点续跑、限流自愈、每轮自动重连）。两者都位于本包根目录，一律用相对路径调用，不依赖任何绝对安装位置。'
+触发条件: "用户要求批量删除视频号历史视频并给出明确时间范围时加载。仅处理本机 Edge 中已登录的本人视频号账号，不处理他人账号。"
 ---
 
 # 视频号助手批量删除视频

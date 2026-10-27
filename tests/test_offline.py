@@ -188,8 +188,31 @@ class TestSkillDoc(unittest.TestCase):
         except ImportError:
             self.skipTest("PyYAML 不可用")
 
-        for key in ("name", "description", "删除程序", "触发条件"):
+        required = (
+            "name",
+            "version",
+            "display_name",
+            "display_name_en",
+            "description",
+            "description_zh",
+            "description_en",
+            "删除程序",
+            "触发条件",
+        )
+        for key in required:
             self.assertIn(key, fm, f"frontmatter 缺少 {key}")
+            self.assertTrue(str(fm[key]).strip(), f"frontmatter 字段为空 {key}")
+
+        import re as _re
+
+        self.assertRegex(
+            str(fm["version"]), _re.compile(r"^\d+\.\d+\.\d+$"), "version 格式不对"
+        )
+        self.assertEqual(
+            str(fm["description"]).strip(),
+            str(fm["description_zh"]).strip(),
+            "description 与 description_zh 不一致",
+        )
 
         for section in (
             "角色与目标", "输入规范", "强制安全规则", "分步执行流程",
