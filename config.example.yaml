@@ -1,0 +1,167 @@
+# ============================================================================
+# 视频号批量删除工具 —— 配置文件
+# 所有参数都可以改，改完直接重跑，不用重新安装。
+# 相对路径一律相对本文件所在目录（项目根）。
+# ============================================================================
+
+app:
+  log_dir: "logs"                 # 日志目录
+  shot_dir: "shots"               # 失败截图目录（运行结束后按下面开关清理）
+  state_file: "state.json"        # 断点续跑状态
+  purge_shots_on_finish: true     # ★需求6：运行完毕后删除所有截图
+                                  #   想留证据就改 false，或运行时加 --keep-shots
+
+# ---------------------------------------------------------------------------
+# 一、时间范围（闭区间，含首尾）
+# ---------------------------------------------------------------------------
+range:
+  start: "2022-01-01"
+  end: "2025-12-31"
+
+# ---------------------------------------------------------------------------
+# 二、Edge 连接
+# ---------------------------------------------------------------------------
+cdp:
+  host: "127.0.0.1"
+  port: 9222                      # 必须与 start-edge.bat 里的 PORT 一致
+  match_url: "channels.weixin.qq.com"
+  timeout: 30                     # 单条 CDP 指令超时（秒）
+
+edge:
+  exe: ""                         # 留空自动探测；也可写死绝对路径
+  profile_dir: ".edge-profile"    # 独立 profile，登录态存在这里，永久有效
+
+urls:
+  post_list: "https://channels.weixin.qq.com/platform/post/list"
+  # 垃圾桶入口。优先按下面的 tab 文本在页面上点，找不到才用 trash_url 直接跳转。
+  trash_tab_text: ["垃圾桶", "回收站", "已删除", "Trash"]
+  trash_url: ""                   # 例如 "https://channels.weixin.qq.com/platform/post/list?tab=trash"
+
+# ---------------------------------------------------------------------------
+# 三、页面结构选择器（多组备用，按顺序试）
+# 一般不用改。如果 inspect 出来的条目不对，先调这里。
+# ---------------------------------------------------------------------------
+selectors:
+  list_root:                      # 列表容器，留空表示在整个 body 里找
+    - ".post-list"
+    - "#app"
+    - ""
+  card_max_up: 8                  # 从时间文本向上最多找几层祖先当"卡片"
+  card_min_width: 240
+  card_min_height: 56
+  card_max_height: 420
+
+  delete_texts: ["删除", "Delete"]
+  more_texts: ["更多", "…", "...", "管理"]
+  # 确认弹窗的按钮文案。「确定/确认」放前面：列表里到处是「删除」两个字，
+  # 用它去匹配弹窗按钮容易误命中列表项。
+  confirm_texts: ["确定", "确认", "确认删除", "彻底删除", "删除"]
+  cancel_texts: ["取消", "关闭"]
+
+  login_signals: ["扫码登录", "请使用微信扫码", "登录视频号", "登录后查看更多"]
+  captcha_signals: ["滑块", "安全验证", "请完成验证", "拖动滑块"]
+  risk_signals: ["操作过于频繁", "系统繁忙", "请稍后再试", "网络异常", "请求失败"]
+  success_signals: ["删除成功", "已删除", "操作成功"]
+
+# ---------------------------------------------------------------------------
+# 四、按钮定位（DOM 定位失败后的坐标兜底）
+#
+# anchor 是锚点：
+#   card_tl / card_tr / card_bl / card_br / card_center   —— 卡片四角/中心
+#   dialog_bc / dialog_tc / dialog_center                 —— 弹窗底部中/顶部中/中心
+# dx / dy 是相对锚点的偏移（CSS 像素，右为正、下为正）。
+#
+# 坐标点会逐个尝试，每点一次都校验"确认弹窗是否出现"，
+# 没出现就换下一个点，所以点歪了不会误删。
+# ---------------------------------------------------------------------------
+locate:
+  delete_offsets:
+    - { name: "卡片右上-更多",     anchor: "card_tr",     dx: -24, dy:  24 }
+    - { name: "卡片右中",          anchor: "card_tr",     dx: -60, dy:   0 }
+    - { name: "卡片右下",          anchor: "card_br",     dx: -24, dy: -24 }
+    - { name: "卡片右上-内缩",     anchor: "card_tr",     dx: -48, dy:  44 }
+    - { name: "卡片中心偏右",      anchor: "card_center", dx: 180, dy:   0 }
+
+  confirm_offsets:
+    - { name: "弹窗底部中",        anchor: "dialog_bc",     dx:   0, dy: -36 }
+    - { name: "弹窗底部中-偏右",   anchor: "dialog_bc",     dx:  64, dy: -36 }
+    - { name: "弹窗底部中-偏左",   anchor: "dialog_bc",     dx: -64, dy: -36 }
+    - { name: "弹窗中心偏下",      anchor: "dialog_center", dx:   0, dy:  48 }
+
+  # 模板图（可选）。放 templates/ 下，用 tools/capture_templates.py 采集。
+  # 缺失不影响运行，只是少了图像校验这一层。
+  templates:
+    confirm_dialog: "templates/confirm_dialog.png"
+    delete_menu: "templates/delete_menu.png"
+    success_toast: "templates/success_toast.png"
+  template_threshold: 0.82
+
+  click_verify_wait: 0.45          # 点击后等多久再判断弹窗是否出现
+  attempts_per_point: 2            # 每个坐标点最多点几次
+
+# ---------------------------------------------------------------------------
+# 五、节流与安全上限
+# ---------------------------------------------------------------------------
+limits:
+  daily_max: 0                     # 单日最多处理多少条（0=不限，跑完全部为止）
+  max_consecutive_failures: 4      # 连续失败几次就熔断停止
+  max_items_per_run: 0             # 本轮最多处理多少条（0=不限）
+  min_delay: 1.25                  # 两条之间的最小随机间隔（秒）
+  max_delay: 3.75                  # 最大随机间隔（原 2.5~7.5，整体减半）
+  long_pause_every: 12             # 每处理 N 条长休一次
+  long_pause_min: 20
+  long_pause_max: 45
+  scroll_pause: 1.2                # 每滚一屏后等待渲染
+  page_wait: 1.6                   # 每次翻页后等待新页渲染
+  max_pages: 400                   # 最多翻多少页（防止死循环）
+  rescan_rounds: 3                 # 删除漏项后最多重扫几轮
+  max_scroll_rounds: 400           # 无分页器时的滚动兜底：最多滚多少屏
+  max_idle_scrolls: 5              # 连续几屏没有新条目就认为到底
+
+  # ---- 冷却重试（对应「请求受限 / 操作失败后等 20 分钟再试」）----
+  cooldown_seconds: 1200           # 冷却时长：1200 秒 = 20 分钟
+  max_retry_per_item: 2            # 同一条视频失败后最多重试几次（每次间隔一个冷却）
+  max_cooldown_rounds: 6           # 单次运行内最多连续冷却几轮，超过就停手等人
+
+# ---------------------------------------------------------------------------
+# 六、暂停 / 中断
+#
+# 不用碰控制台：在项目根目录建一个名为 .pause 的空文件 → 下次检查即暂停；
+# 删掉 .pause（或建 .resume）→ 继续。建 .stop → 优雅退出。
+# 遇到验证码 / 风控时程序会自己写 .pause 并响一声，处理完写 .resume 即可。
+# ---------------------------------------------------------------------------
+pause:
+  pause_flag: ".pause"
+  resume_flag: ".resume"
+  auto_resume_after: 0             # >0 表示暂停 N 秒后自动恢复（验证码场景建议留 0）
+  beep: true
+
+# ---------------------------------------------------------------------------
+# 七、结果校验
+# ---------------------------------------------------------------------------
+verify:
+  row_disappear_timeout: 4.0       # 点确认后等待结果的时限（列表不刷新，主要靠 toast 判定，4 秒足够）
+  dialog_timeout: 3.5              # 等确认弹窗出现的最长时间
+  shot_on_failure: true            # 失败时截图（运行结束会统一清理）
+  shot_on_success: false           # 成功也截图（很占空间，默认关）
+
+trash:
+  # 视频号后台实测没有独立的「回收站/垃圾桶」入口（页面只有「草稿箱」），
+  # 列表页删除即为最终删除、不可恢复。所以默认关闭这一步。
+  # 如果你的账号确实有回收站，把 enabled 改 true 并填下面的 trash_url。
+  enabled: false
+  # 回收站地址（仅 enabled=true 时使用），例如：
+  # "https://channels.weixin.qq.com/platform/post/list?tab=recycle"
+
+# ---------------------------------------------------------------------------
+# 八、内容管理限制的自动恢复
+#
+# 被内容管理规则限制时：完整记录现场 → 等 1 小时 → 探测恢复 → 继续。
+# 探测不通过就再等 1 小时，最多 max_retries 次；仍不通过则转人工并停止。
+# ---------------------------------------------------------------------------
+restriction:
+  cooldown_seconds: 3600        # 每次等待 3600 秒 = 1 小时
+  max_retries: 5                # 最多重试 5 次（累计最长 5 小时）
+  min_page_ratio: 0.9           # 恢复探测时总页数不得低于预期的 90%（防"数据缩水式限流"）
+  expected_pages: 0             # 填 0 表示按历史记录自动判断；也可写死，例如 137
+  report_file: "RESTRICTION-REPORT.md"   # 报告文件名（落在 logs/ 下）

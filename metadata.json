@@ -1,0 +1,32 @@
+{
+  "name": "channels-video-batch-delete",
+  "version": "1.0.0",
+  "title": "视频号助手批量删除视频",
+  "description": "在电脑端视频号助手后台按时间范围批量删除历史视频，后台运行不抢占键鼠，限流自动等待恢复，断点续跑。",
+  "generated_at": "2026-10-27",
+  "generated_by": "channels-cleaner v1.0.0 (实测账号：2760 条视频，成功删除 1192+ 条后打包)",
+  "platform": {
+    "os": ["Windows 10", "Windows 11"],
+    "browser": ["Microsoft Edge 130+", "Google Chrome 130+"],
+    "python": ">=3.10",
+    "node": ">=18（可选，仅用于离线 JS 语法测试）"
+  },
+  "python_dependencies": {
+    "opencv-python": ">=4.8",
+    "numpy": ">=1.24",
+    "websocket-client": ">=1.6",
+    "PyYAML": ">=6.0"
+  },
+  "entry_points": {
+    "skill": "SKILL.md",
+    "single_run": "run.py",
+    "daemon": "daemon.py",
+    "browser_launcher": "start-edge.bat"
+  },
+  "not_portable": [
+    "start-edge.bat / start-daemon.bat / run.bat：仅 Windows 批处理",
+    "cleaner/win32bg.py：Win32 PrintWindow 后台截图，仅 Windows，为备用取证通道",
+    "浏览器登录态：绑定本机，不可迁移"
+  ],
+  "agent_compatibility": "SKILL.md 为纯 Markdown 流程文档，任何大模型均可加载；程序为独立参考实现，两者可分开使用。"
+}

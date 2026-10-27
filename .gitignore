@@ -1,0 +1,35 @@
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# ---------- 运行产物（含隐私，绝不入库） ----------
+state.json
+state.corrupt.json
+logs/
+shots/
+.edge-profile/
+.pause
+.resume
+.stop
+
+# ---------- 用户本地采集的模板图 ----------
+templates/*.png
+templates/*.jpg
+
+# ---------- 配置（用 config.example.yaml 代替） ----------
+config.yaml
+
+# ---------- 系统与编辑器 ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*~
